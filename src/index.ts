@@ -1,3 +1,6 @@
+const CANVAS_WIDTH = 500;
+const CANVAS_HEIGHT = 300;
+
 // FILE INPUT
 const input = document.createElement('input')
 input.type = 'file'
@@ -8,11 +11,20 @@ document.body.appendChild(document.createElement('br'))
 
 // INPUT IMAGE
 const inputImage = document.createElement('img')
-document.body.appendChild(inputImage)
 
-// OUTPUT IMAGE
-const outputImage = document.createElement('img')
-document.body.appendChild(outputImage)
+const inputCanvas = document.createElement('canvas')
+inputCanvas.width = CANVAS_WIDTH
+inputCanvas.height = CANVAS_HEIGHT
+document.body.appendChild(inputCanvas)
+
+document.body.appendChild(document.createElement('br'))
+
+const outputCanvas = document.createElement('canvas')
+outputCanvas.width = CANVAS_WIDTH
+outputCanvas.height = CANVAS_HEIGHT
+document.body.appendChild(outputCanvas)
+// const context = outputCanvas.getContext('gpupresent');
+// const swapChainFormat = 'bgra8unorm';
 
 function imageSelected(event: Event) {
     const files = this.files;
@@ -25,29 +37,20 @@ function imageSelected(event: Event) {
     dataUrlReader.addEventListener("load", function () {
         // convert image file to base64 string
         inputImage.src = dataUrlReader.result as string
+
+        inputImage.onload = () => {
+            const context = inputCanvas.getContext("2d");
+
+            context.drawImage(inputImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+            var imgData = context.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            processImage(imgData.data).then((result) => {
+                console.log('ready')
+                outputCanvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(result), CANVAS_WIDTH, CANVAS_HEIGHT), 0, 0)
+            })
+        }
     }, false);
     dataUrlReader.readAsDataURL(files[0])
-
-    const arrayReader = new FileReader();
-    arrayReader.addEventListener("load", function () {
-        // process image with webgpu
-        processImage(arrayReader.result as ArrayBuffer).then( result => {
-            let processed = 'data:' + files[0].type + ';base64,'
-
-            let binary = '';
-            var bytes = new Uint8Array( result );
-            var len = bytes.byteLength;
-            for (var i = 0; i < len; i++) {
-                binary += String.fromCharCode( bytes[ i ] );
-            }
-
-            processed += window.btoa(binary);
-            console.log(processed)
-
-            outputImage.src = processed
-        });
-    }, false);
-    arrayReader.readAsArrayBuffer(files[0])
 }
 
 async function gpuDevice() {
@@ -58,7 +61,6 @@ async function gpuDevice() {
     }
     return await adapter.requestDevice();
 }
-const device = gpuDevice();
 
 function processImage(array: ArrayBuffer): Promise<ArrayBuffer> {
     return new Promise(
@@ -69,8 +71,8 @@ function processImage(array: ArrayBuffer): Promise<ArrayBuffer> {
                     return;
                 }
 
+                // NORMALIZE ARRAY
                 let inputArray = Array.from(new Uint8Array(array))
-                console.log('org. length ' + inputArray.length)
                 const pad = 4 - (inputArray.length % 4);
                 if (pad != 4) { // must be multiple of 4
                     console.log('modulo ' + pad)
@@ -79,7 +81,6 @@ function processImage(array: ArrayBuffer): Promise<ArrayBuffer> {
                     }
                 }
 
-                console.log('byte length ' + inputArray.length)
                 // Get a GPU buffer in a mapped state and an arrayBuffer for writing.
                 const gpuWriteBuffer = device.createBuffer({
                     mappedAtCreation: true,
