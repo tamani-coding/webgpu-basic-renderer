@@ -1,22 +1,30 @@
-import { init } from './renderer'
+import { WebGpuRenderer } from './renderer'
 
 const outputCanvas = document.createElement('canvas')
 outputCanvas.width = window.innerWidth
 outputCanvas.height = window.innerHeight
 document.body.appendChild(outputCanvas)
 
-window.onresize = () => {
-    outputCanvas.width = window.innerWidth
-    outputCanvas.height = window.innerHeight
-}
-
 let stopRunning = false;
-init(outputCanvas).then((frame) => {
-    const doFrame = () => {
-        if (stopRunning) return;
 
-        frame();
+const renderer = new WebGpuRenderer();
+
+renderer.init(outputCanvas).then((success) => {
+    const doFrame = () => {
+        if (!success || stopRunning) return;
+
+        renderer.frame();
         requestAnimationFrame(doFrame);
     };
     requestAnimationFrame(doFrame);
 });
+
+window.onresize = () => {
+    outputCanvas.width = window.innerWidth;
+    outputCanvas.height = window.innerHeight;
+    renderer.update(outputCanvas);
+}
+
+outputCanvas.onwheel = (event: WheelEvent) => {
+    renderer.zoom(- event.deltaY / 100)
+}
