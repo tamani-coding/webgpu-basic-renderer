@@ -1,11 +1,11 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { cubeVertexArray, cubeVertexSize, cubePositionOffset, cubeColorOffset, cubeVertexCount } from './vertices'
+import { triangleVertexArray, triangleVertexSize, trianglePositionOffset, triangleColorOffset, triangleVertexCount } from './vertices'
+import { cubeVertexArray, cubeVertexCount } from './vertices'
 
 export class WebGpuRenderer {
 
     readonly swapChainFormat = 'bgra8unorm';
-    readonly uniformBufferSize = 4 * 16; // 4x4 matrix
-    readonly projectionMatrix = mat4.create();
+    // readonly uniformBufferSize = 4 * 16; // 4x4 matrix
 
     private initSuccess: boolean = false;
     private zoomDelta: number = -5;
@@ -13,10 +13,37 @@ export class WebGpuRenderer {
     private device: GPUDevice;
     private swapChain: GPUSwapChain;
     private uniformBuffer: GPUBuffer;
-    private uniformBindGroup: GPUBindGroup;
     private renderPassDescriptor: GPURenderPassDescriptor;
     private pipeline: GPURenderPipeline;
-    private verticesBuffer: GPUBuffer;
+
+    private uniformBindGroup1: GPUBindGroup;
+    private uniformBindGroup2: GPUBindGroup;
+
+    private matrixSize = 4 * 16; // 4x4 matrix
+    private offset = 256; // uniformBindGroup offset must be 256-byte aligned
+    private uniformBufferSize = this.offset + this.matrixSize;
+
+    private verticesBuffer: GPUBuffer[] = [];
+
+    private projectionMatrix = mat4.create();
+    private viewMatrix = mat4.create();
+
+    private modelMatrix1 = mat4.create();
+    private modelMatrix2 = mat4.create();
+
+    private modelViewProjectionMatrix1 = mat4.create() as Float32Array;
+    private modelViewProjectionMatrix2 = mat4.create() as Float32Array;
+
+    private tmpMat41 = mat4.create();
+    private tmpMat42 = mat4.create();
+
+
+    constructor() {
+        mat4.translate(this.viewMatrix, this.viewMatrix, vec3.fromValues(0, 0, -5));
+
+        mat4.translate(this.modelMatrix1, this.modelMatrix1, vec3.fromValues(-2, 0, 0));
+        mat4.translate(this.modelMatrix2, this.modelMatrix2, vec3.fromValues(2, 0, 0));
+    }
 
     public async init(canvas: HTMLCanvasElement): Promise<boolean> {
         if (!canvas) {
@@ -34,13 +61,8 @@ export class WebGpuRenderer {
 
         this.updateProjectionMatrix(canvas);
 
-        this.verticesBuffer = this.device.createBuffer({
-            size: cubeVertexArray.byteLength,
-            usage: GPUBufferUsage.VERTEX,
-            mappedAtCreation: true,
-        });
-        new Float32Array(this.verticesBuffer.getMappedRange()).set(cubeVertexArray);
-        this.verticesBuffer.unmap();
+        this.addVertexBuffer(triangleVertexArray)
+        this.addVertexBuffer(cubeVertexArray)
 
         this.pipeline = this.device.createRenderPipeline({
             vertex: {
@@ -50,18 +72,18 @@ export class WebGpuRenderer {
                 entryPoint: 'main',
                 buffers: [
                     {
-                        arrayStride: cubeVertexSize,
+                        arrayStride: triangleVertexSize,
                         attributes: [
                             {
                                 // position
                                 shaderLocation: 0,
-                                offset: cubePositionOffset,
+                                offset: trianglePositionOffset,
                                 format: 'float32x4',
                             },
                             {
                                 // color
                                 shaderLocation: 1,
-                                offset: cubeColorOffset,
+                                offset: triangleColorOffset,
                                 format: 'float32x4',
                             },
                         ],
@@ -114,13 +136,28 @@ export class WebGpuRenderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        this.uniformBindGroup = this.device.createBindGroup({
+        this.uniformBindGroup1 = this.device.createBindGroup({
             layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
                     resource: {
                         buffer: this.uniformBuffer,
+                        offset: 0,
+                        size: this.matrixSize,
+                    },
+                },
+            ],
+        });
+        this.uniformBindGroup2 = this.device.createBindGroup({
+            layout: this.pipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.uniformBuffer,
+                        offset: this.offset,
+                        size: this.matrixSize,
                     },
                 },
             ],
@@ -143,14 +180,8 @@ export class WebGpuRenderer {
             return;
         }
 
-        const transformationMatrix = this.getTransformationMatrix();
-        this.device.queue.writeBuffer(
-            this.uniformBuffer,
-            0,
-            transformationMatrix.buffer,
-            transformationMatrix.byteOffset,
-            transformationMatrix.byteLength
-        );
+        this.getTransformationMatrix();
+
 
         (this.renderPassDescriptor.colorAttachments as [GPURenderPassColorAttachmentDescriptor])[0].attachment = this.swapChain
             .getCurrentTexture()
@@ -159,9 +190,32 @@ export class WebGpuRenderer {
         const commandEncoder = this.device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
         passEncoder.setPipeline(this.pipeline);
-        passEncoder.setBindGroup(0, this.uniformBindGroup);
-        passEncoder.setVertexBuffer(0, this.verticesBuffer);
+
+        // for (let i = 0; i < this.verticesBuffer.length; i++) {
+        //     passEncoder.setVertexBuffer(i, this.verticesBuffer[i]);
+        // }
+        this.device.queue.writeBuffer(
+            this.uniformBuffer,
+            0,
+            this.modelViewProjectionMatrix1.buffer,
+            this.modelViewProjectionMatrix1.byteOffset,
+            this.modelViewProjectionMatrix1.byteLength
+        );
+        passEncoder.setVertexBuffer(0, this.verticesBuffer[0]);
+        passEncoder.setBindGroup(0, this.uniformBindGroup1);
+        passEncoder.draw(triangleVertexCount, 1, 0, 0);
+        
+        this.device.queue.writeBuffer(
+            this.uniformBuffer,
+            this.offset,
+            this.modelViewProjectionMatrix2.buffer,
+            this.modelViewProjectionMatrix2.byteOffset,
+            this.modelViewProjectionMatrix2.byteLength
+        );
+        passEncoder.setVertexBuffer(0, this.verticesBuffer[1]);
+        passEncoder.setBindGroup(0, this.uniformBindGroup2);
         passEncoder.draw(cubeVertexCount, 1, 0, 0);
+
         passEncoder.endPass();
         this.device.queue.submit([commandEncoder.finish()]);
     }
@@ -200,20 +254,47 @@ export class WebGpuRenderer {
     }
 
     private getTransformationMatrix() {
-        const viewMatrix = mat4.create();
-        mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 0, -5));
         const now = Date.now() / 1000;
+
         mat4.rotate(
-            viewMatrix,
-            viewMatrix,
+            this.tmpMat41,
+            this.modelMatrix1,
             1,
             vec3.fromValues(Math.sin(now), Math.cos(now), 0)
         );
+        mat4.rotate(
+            this.tmpMat42,
+            this.modelMatrix2,
+            1,
+            vec3.fromValues(Math.cos(now), Math.sin(now), 0)
+        );
 
-        const modelViewProjectionMatrix = mat4.create();
-        mat4.multiply(modelViewProjectionMatrix, this.projectionMatrix, viewMatrix);
+        mat4.multiply(this.modelViewProjectionMatrix1, this.viewMatrix, this.tmpMat41);
+        mat4.multiply(
+            this.modelViewProjectionMatrix1,
+            this.projectionMatrix,
+            this.modelViewProjectionMatrix1
+        );
+        mat4.multiply(this.modelViewProjectionMatrix2, this.viewMatrix, this.tmpMat42);
+        mat4.multiply(
+            this.modelViewProjectionMatrix2,
+            this.projectionMatrix,
+            this.modelViewProjectionMatrix2
+        );
+    }
 
-        return modelViewProjectionMatrix as Float32Array;
+    private addVertexBuffer(array: Float32Array): GPUBuffer {
+        const buffer = this.device.createBuffer({
+            size: array.byteLength,
+            usage: GPUBufferUsage.VERTEX,
+            mappedAtCreation: true,
+        });
+        new Float32Array(buffer.getMappedRange()).set(array);
+        buffer.unmap();
+
+        this.verticesBuffer.push(buffer)
+
+        return buffer;
     }
 }
 
