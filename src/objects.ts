@@ -38,17 +38,26 @@ export interface RenderObjectParameter {
     y?: number;
     z?: number;
 
+    rotX?: number;
+    rotY?: number;
+    rotZ?: number;
 }
 
 export class RenderObject {
+
+    public x: number = 0;
+    public y: number = 0;
+    public z: number = 0;
+
+    public rotX: number = 0;
+    public rotY: number = 0;
+    public rotZ: number = 0;
 
     private matrixSize = 4 * 16; // 4x4 matrix
     private offset = 256; // uniformBindGroup offset must be 256-byte aligned
     private uniformBufferSize = this.offset + this.matrixSize;
 
-    private modelMatrix = mat4.create();
     private modelViewProjectionMatrix = mat4.create() as Float32Array;
-    private tmpMat4 = mat4.create();
 
     private renderPipeline: GPURenderPipeline;
     private uniformBuffer: GPUBuffer;
@@ -161,16 +170,18 @@ export class RenderObject {
     }
 
     private updateTransformationMatrix(viewMatrix: mat4, projectionMatrix: mat4) {
-        const now = Date.now() / 1000;
-
+        // MOVE / TRANSLATE OBJECT
+        const modelMatrix = mat4.create();
+        mat4.translate(modelMatrix, modelMatrix, vec3.fromValues(this.x, this.y, this.z))
         mat4.rotate(
-            this.tmpMat4,
-            this.modelMatrix,
+            modelMatrix,
+            modelMatrix,
             1,
-            vec3.fromValues(Math.sin(now), Math.cos(now), 0)
+            vec3.fromValues(this.rotX, this.rotY, this.rotZ)
         );
 
-        mat4.multiply(this.modelViewProjectionMatrix, viewMatrix, this.tmpMat4);
+        // PROJECT ON CAMERA
+        mat4.multiply(this.modelViewProjectionMatrix, viewMatrix, modelMatrix);
         mat4.multiply(
             this.modelViewProjectionMatrix,
             projectionMatrix,
@@ -183,11 +194,12 @@ export class RenderObject {
             return;
         }
 
-        if (parameter.x || parameter.y || parameter.z) {
-            mat4.translate(
-                this.modelMatrix, 
-                this.modelMatrix, 
-                vec3.fromValues(parameter.x ? parameter.x : 0, parameter.y ? parameter.y : 0, parameter.z ? parameter.z : 0));
-        }
+        this.x = parameter.x ? parameter.x : 0;
+        this.y = parameter.y ? parameter.y : 0;
+        this.z = parameter.z ? parameter.z : 0;
+
+        this.rotX = parameter.rotX ? parameter.rotX : 0;
+        this.rotY = parameter.rotY ? parameter.rotY : 0;
+        this.rotZ = parameter.rotZ ? parameter.rotZ : 0;
     }
 }

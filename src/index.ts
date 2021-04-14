@@ -17,11 +17,22 @@ camera.z = -7
 
 renderer.init(outputCanvas).then((success) => {
 
-    scene.add(RenderObject.cube(renderer.getDevice(), { x: -2, y: 1 }))
-    scene.add(RenderObject.pyramid(renderer.getDevice(), { x: 2 }))
+    let box = RenderObject.cube(renderer.getDevice(), { x: -2, y: 1 });
+    scene.add(box);
+    let pyramid = RenderObject.pyramid(renderer.getDevice(), { x: 2 });
+    scene.add(pyramid)
 
     const doFrame = () => {
         if (!success || stopRunning) return;
+
+        // ANIMATE
+        const now = Date.now() / 1000;
+
+        box.rotX = Math.sin(now)
+        box.rotZ = Math.cos(now)
+
+        pyramid.rotX = Math.cos(now)
+        pyramid.rotZ = Math.sin(now)
 
         renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
