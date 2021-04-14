@@ -1,3 +1,4 @@
+import { Camera } from './camera';
 import { WebGpuRenderer } from './renderer'
 
 const outputCanvas = document.createElement('canvas')
@@ -8,12 +9,14 @@ document.body.appendChild(outputCanvas)
 let stopRunning = false;
 
 const renderer = new WebGpuRenderer();
+const camera = new Camera(outputCanvas.width / outputCanvas.height);
+camera.z = -7
 
 renderer.init(outputCanvas).then((success) => {
     const doFrame = () => {
         if (!success || stopRunning) return;
 
-        renderer.frame();
+        renderer.frame(camera);
         requestAnimationFrame(doFrame);
     };
     requestAnimationFrame(doFrame);
@@ -22,9 +25,10 @@ renderer.init(outputCanvas).then((success) => {
 window.onresize = () => {
     outputCanvas.width = window.innerWidth;
     outputCanvas.height = window.innerHeight;
+    camera.aspect = outputCanvas.width / outputCanvas.height;
     renderer.update(outputCanvas);
 }
 
 outputCanvas.onwheel = (event: WheelEvent) => {
-    renderer.zoom(- event.deltaY / 100)
+    camera.z -= event.deltaY / 100
 }

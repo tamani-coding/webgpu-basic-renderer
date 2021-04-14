@@ -1,3 +1,4 @@
+import { Camera } from './camera';
 import { mat4, vec3 } from 'gl-matrix';
 import { RenderObject } from './objects';
 
@@ -7,21 +8,15 @@ export class WebGpuRenderer {
     // readonly uniformBufferSize = 4 * 16; // 4x4 matrix
 
     private initSuccess: boolean = false;
-    private zoomDelta: number = -5;
 
     private device: GPUDevice;
     private swapChain: GPUSwapChain;
     private renderPassDescriptor: GPURenderPassDescriptor;
 
-    private projectionMatrix = mat4.create();
-    private viewMatrix = mat4.create();
-
     private objects: RenderObject[] = [];
 
 
-    constructor() {
-        mat4.translate(this.viewMatrix, this.viewMatrix, vec3.fromValues(0, 0, -5));
-    }
+    constructor() { }
 
     public async init(canvas: HTMLCanvasElement): Promise<boolean> {
         if (!canvas) {
@@ -36,8 +31,6 @@ export class WebGpuRenderer {
             device: this.device,
             format: this.swapChainFormat,
         });
-
-        this.updateProjectionMatrix(canvas);
 
         const depthTextureView = this.depthTextureView(canvas);
         this.renderPassDescriptor = {
@@ -58,7 +51,7 @@ export class WebGpuRenderer {
             },
         };
 
-        this.objects.push(RenderObject.cube(this.device, { x: -2 }))
+        this.objects.push(RenderObject.cube(this.device, { x: -2, y: 1 }))
         this.objects.push(RenderObject.pyramid(this.device, { x: 2 }))
 
         return this.initSuccess = true;
@@ -69,11 +62,10 @@ export class WebGpuRenderer {
             return;
         }
 
-        this.updateProjectionMatrix(canvas);
         this.UpdateRenderPassDescriptor(canvas);
     }
 
-    public frame() {
+    public frame(camera: Camera) {
         if (!this.initSuccess) {
             return;
         }
@@ -86,15 +78,11 @@ export class WebGpuRenderer {
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
         for (let object of this.objects) {
-            object.draw(passEncoder, this.device, this.viewMatrix, this.projectionMatrix)
+            object.draw(passEncoder, this.device, camera.getViewMatrix(), camera.getProjectionMatrix())
         }
 
         passEncoder.endPass();
         this.device.queue.submit([commandEncoder.finish()]);
-    }
-
-    public zoom(delta: number) {
-        this.zoomDelta += delta;
     }
 
     private async gpuDevice() {
@@ -115,11 +103,6 @@ export class WebGpuRenderer {
             format: 'depth24plus-stencil8',
             usage: GPUTextureUsage.RENDER_ATTACHMENT,
         }).createView();
-    }
-
-    private updateProjectionMatrix(canvas: HTMLCanvasElement) {
-        const aspect = Math.abs(canvas.width / canvas.height);
-        mat4.perspective(this.projectionMatrix, (2 * Math.PI) / 5, aspect, 1, 100.0);
     }
 
     private UpdateRenderPassDescriptor(canvas: HTMLCanvasElement) {
