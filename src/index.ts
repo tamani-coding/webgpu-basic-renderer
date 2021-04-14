@@ -32,7 +32,12 @@ renderer.init(outputCanvas).then((success) => {
         box.rotZ = Math.cos(now)
 
         pyramid.rotX = Math.cos(now)
+        pyramid.rotY = Math.sin(now)
         pyramid.rotZ = Math.sin(now)
+        
+        camera.rotX = Math.sin(now)
+        // camera.rotY = Math.cos(now)
+        camera.rotZ = Math.cos(now)
 
         renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
@@ -50,3 +55,27 @@ window.onresize = () => {
 outputCanvas.onwheel = (event: WheelEvent) => {
     camera.z -= event.deltaY / 100
 }
+
+
+function addCube() {
+    console.log('box add')
+    let box = RenderObject.cube({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 10 });
+    scene.add(box);
+}
+
+function addPyramid() {
+    let pyramid = RenderObject.pyramid({ x: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 });
+    scene.add(pyramid);
+}
+
+const boxB = document.createElement('button')
+boxB.textContent = "ADD BOX"
+boxB.classList.add('cubeButton')
+boxB.onclick = addCube
+document.body.appendChild(boxB)
+
+const pyramidB = document.createElement('button')
+pyramidB.textContent = "ADD PYRAMID"
+pyramidB.classList.add('pyramidButton')
+pyramidB.onclick = addPyramid
+document.body.appendChild(pyramidB)
