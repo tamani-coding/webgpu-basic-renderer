@@ -1,3 +1,5 @@
+import { RenderObject } from './objects';
+import { Scene } from './scene';
 import { Camera } from './camera';
 import { WebGpuRenderer } from './renderer'
 
@@ -10,13 +12,18 @@ let stopRunning = false;
 
 const renderer = new WebGpuRenderer();
 const camera = new Camera(outputCanvas.width / outputCanvas.height);
+const scene = new Scene();
 camera.z = -7
 
 renderer.init(outputCanvas).then((success) => {
+
+    scene.add(RenderObject.cube(renderer.getDevice(), { x: -2, y: 1 }))
+    scene.add(RenderObject.pyramid(renderer.getDevice(), { x: 2 }))
+
     const doFrame = () => {
         if (!success || stopRunning) return;
 
-        renderer.frame(camera);
+        renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
     };
     requestAnimationFrame(doFrame);

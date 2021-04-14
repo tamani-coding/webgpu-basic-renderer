@@ -1,6 +1,5 @@
+import { Scene } from './scene';
 import { Camera } from './camera';
-import { mat4, vec3 } from 'gl-matrix';
-import { RenderObject } from './objects';
 
 export class WebGpuRenderer {
 
@@ -12,9 +11,6 @@ export class WebGpuRenderer {
     private device: GPUDevice;
     private swapChain: GPUSwapChain;
     private renderPassDescriptor: GPURenderPassDescriptor;
-
-    private objects: RenderObject[] = [];
-
 
     constructor() { }
 
@@ -51,9 +47,6 @@ export class WebGpuRenderer {
             },
         };
 
-        this.objects.push(RenderObject.cube(this.device, { x: -2, y: 1 }))
-        this.objects.push(RenderObject.pyramid(this.device, { x: 2 }))
-
         return this.initSuccess = true;
     }
 
@@ -65,7 +58,7 @@ export class WebGpuRenderer {
         this.UpdateRenderPassDescriptor(canvas);
     }
 
-    public frame(camera: Camera) {
+    public frame(camera: Camera, scene: Scene) {
         if (!this.initSuccess) {
             return;
         }
@@ -77,12 +70,16 @@ export class WebGpuRenderer {
         const commandEncoder = this.device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
-        for (let object of this.objects) {
+        for (let object of scene.getObjects()) {
             object.draw(passEncoder, this.device, camera.getViewMatrix(), camera.getProjectionMatrix())
         }
 
         passEncoder.endPass();
         this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    public getDevice () : GPUDevice {
+        return this.device;
     }
 
     private async gpuDevice() {
