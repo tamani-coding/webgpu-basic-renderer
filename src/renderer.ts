@@ -1,14 +1,14 @@
 import { Scene } from './scene';
 import { Camera } from './camera';
 
+export var device: GPUDevice;
+
 export class WebGpuRenderer {
 
     readonly swapChainFormat = 'bgra8unorm';
-    // readonly uniformBufferSize = 4 * 16; // 4x4 matrix
 
     private initSuccess: boolean = false;
 
-    private device: GPUDevice;
     private swapChain: GPUSwapChain;
     private renderPassDescriptor: GPURenderPassDescriptor;
 
@@ -20,11 +20,11 @@ export class WebGpuRenderer {
             return false;
         }
 
-        this.device = await this.gpuDevice();
+        device = await this.gpuDevice();
 
         const context = canvas.getContext('gpupresent');
         this.swapChain = context.configureSwapChain({
-            device: this.device,
+            device: device,
             format: this.swapChainFormat,
         });
 
@@ -67,19 +67,15 @@ export class WebGpuRenderer {
             .getCurrentTexture()
             .createView();
 
-        const commandEncoder = this.device.createCommandEncoder();
+        const commandEncoder = device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
         for (let object of scene.getObjects()) {
-            object.draw(passEncoder, this.device, camera.getViewMatrix(), camera.getProjectionMatrix())
+            object.draw(passEncoder, device, camera.getViewMatrix(), camera.getProjectionMatrix())
         }
 
         passEncoder.endPass();
-        this.device.queue.submit([commandEncoder.finish()]);
-    }
-
-    public getDevice () : GPUDevice {
-        return this.device;
+        device.queue.submit([commandEncoder.finish()]);
     }
 
     private async gpuDevice() {
@@ -92,7 +88,7 @@ export class WebGpuRenderer {
     }
 
     private depthTextureView(canvas: HTMLCanvasElement) {
-        return this.device.createTexture({
+        return device.createTexture({
             size: {
                 width: canvas.width,
                 height: canvas.height,

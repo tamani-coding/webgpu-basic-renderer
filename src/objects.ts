@@ -1,3 +1,4 @@
+import { device } from './renderer';
 import { mat4, vec3 } from 'gl-matrix';
 import { triangleVertexArray, triangleVertexCount, cubeVertexArray, cubeVertexCount } from './vertices'
 
@@ -145,11 +146,11 @@ export class RenderObject {
         this.setModelMatrix(parameter);
     }
 
-    public static cube(device: GPUDevice, parameter?: RenderObjectParameter): RenderObject {
+    public static cube(parameter?: RenderObjectParameter): RenderObject {
         return new RenderObject(device, cubeVertexArray, cubeVertexCount, parameter)
     }
 
-    public static pyramid(device: GPUDevice, parameter?: RenderObjectParameter): RenderObject {
+    public static pyramid(parameter?: RenderObjectParameter): RenderObject {
         return new RenderObject(device, triangleVertexArray, triangleVertexCount, parameter)
     }
 

@@ -17,9 +17,9 @@ camera.z = -7
 
 renderer.init(outputCanvas).then((success) => {
 
-    let box = RenderObject.cube(renderer.getDevice(), { x: -2, y: 1 });
+    let box = RenderObject.cube({ x: -2, y: 1 });
     scene.add(box);
-    let pyramid = RenderObject.pyramid(renderer.getDevice(), { x: 2 });
+    let pyramid = RenderObject.pyramid({ x: 2 });
     scene.add(pyramid)
 
     const doFrame = () => {
