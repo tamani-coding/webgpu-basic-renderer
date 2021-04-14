@@ -23,7 +23,9 @@ export class Camera {
     public getViewMatrix () : mat4 {
         let viewMatrix = mat4.create();
         mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(this.x, this.y, this.z));
-        mat4.rotate(viewMatrix, viewMatrix, 1, vec3.fromValues(this.rotX, this.rotY, this.rotZ));
+        mat4.rotateX(viewMatrix, viewMatrix, this.rotX);
+        mat4.rotateY(viewMatrix, viewMatrix, this.rotY);
+        mat4.rotateZ(viewMatrix, viewMatrix, this.rotZ);
         return viewMatrix;
     }
 

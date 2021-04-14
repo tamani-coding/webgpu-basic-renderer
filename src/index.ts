@@ -32,12 +32,11 @@ renderer.init(outputCanvas).then((success) => {
         box.rotZ = Math.cos(now)
 
         pyramid.rotX = Math.cos(now)
-        pyramid.rotY = Math.sin(now)
         pyramid.rotZ = Math.sin(now)
         
-        camera.rotX = Math.sin(now)
-        // camera.rotY = Math.cos(now)
-        camera.rotZ = Math.cos(now)
+        camera.rotX = Math.cos(now / 5) * Math.PI * 2
+        camera.rotY = Math.sin(now / 5) * Math.PI * 2
+        // camera.rotZ = Math.cos(now)
 
         renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
@@ -58,7 +57,6 @@ outputCanvas.onwheel = (event: WheelEvent) => {
 
 
 function addCube() {
-    console.log('box add')
     let box = RenderObject.cube({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 10 });
     scene.add(box);
 }
