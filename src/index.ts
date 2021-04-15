@@ -8,7 +8,6 @@ outputCanvas.width = window.innerWidth
 outputCanvas.height = window.innerHeight
 document.body.appendChild(outputCanvas)
 
-let stopRunning = false;
 
 const camera = new Camera(outputCanvas.width / outputCanvas.height);
 camera.z = -7
@@ -16,13 +15,12 @@ const scene = new Scene();
 
 const renderer = new WebGpuRenderer();
 renderer.init(outputCanvas).then((success) => {
+    if (!success) return;
 
     scene.add(RenderObject.cube({ x: -2, y: 1 }));
     scene.add(RenderObject.pyramid({ x: 2 }))
 
     const doFrame = () => {
-        if (!success || stopRunning) return;
-
         // ANIMATE
         const now = Date.now() / 1000;
 
@@ -47,9 +45,6 @@ window.onresize = () => {
     renderer.update(outputCanvas);
 }
 
-outputCanvas.onwheel = (event: WheelEvent) => {
-    camera.z -= event.deltaY / 100
-}
 
 function addCube() {
     scene.add(RenderObject.cube({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 10 }));
@@ -59,6 +54,8 @@ function addPyramid() {
     scene.add(RenderObject.pyramid({ x: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 }));
 }
 
+
+// BUTTONS
 const boxB = document.createElement('button')
 boxB.textContent = "ADD BOX"
 boxB.classList.add('cubeButton')
@@ -70,3 +67,44 @@ pyramidB.textContent = "ADD PYRAMID"
 pyramidB.classList.add('pyramidButton')
 pyramidB.onclick = addPyramid
 document.body.appendChild(pyramidB)
+
+
+// MOUSE CONTROLS
+
+// ZOOM
+outputCanvas.onwheel = (event: WheelEvent) => {
+    camera.z -= event.deltaY / 100
+}
+
+// MOUSE DRAG
+var mouseDown = false;
+outputCanvas.onmousedown = (event: MouseEvent) => {
+    mouseDown = true;
+
+    lastMouseX = event.pageX;
+    lastMouseY = event.pageY;
+}
+outputCanvas.onmouseup = (event: MouseEvent) => {
+    mouseDown = false;
+}
+var lastMouseX=-1; 
+var lastMouseY=-1;
+outputCanvas.onmousemove = (event: MouseEvent) => {
+    if (!mouseDown) {
+        return;
+    }
+
+    var mousex = event.pageX;
+    var mousey = event.pageY;
+
+    if (lastMouseX > 0 && lastMouseY > 0) {
+        const roty = mousex - lastMouseX;
+        const rotx = mousey - lastMouseY;
+
+        camera.rotY += roty / 100;
+        camera.rotX += rotx / 100;
+    }
+
+    lastMouseX = mousex;
+    lastMouseY = mousey;
+}
