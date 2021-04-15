@@ -1,3 +1,4 @@
+import { Camera } from './camera';
 import { device } from './renderer';
 import { mat4, vec3 } from 'gl-matrix';
 import { triangleVertexArray, triangleVertexCount, cubeVertexArray, cubeVertexCount } from './vertices'
@@ -30,8 +31,8 @@ const wgslShaders = {
 };
 
 const positionOffset = 0;
-const colorOffset = 4 * 4; // Byte offset of cube vertex color attribute.
-const vertexSize = 4 * 10;
+const colorOffset = 4 * 4; // Byte offset of object color attribute.
+const vertexSize = 4 * 10; // Byte size of one object.
 
 export interface RenderObjectParameter {
 
@@ -154,8 +155,8 @@ export class RenderObject {
         return new RenderObject(device, triangleVertexArray, triangleVertexCount, parameter)
     }
 
-    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, viewMatrix: mat4, projectionMatrix: mat4) {
-        this.updateTransformationMatrix(viewMatrix, projectionMatrix)
+    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, camera: Camera) {
+        this.updateTransformationMatrix(camera.getViewMatrix(), camera.getProjectionMatrix())
 
         passEncoder.setPipeline(this.renderPipeline);
         device.queue.writeBuffer(

@@ -82,7 +82,7 @@ export class WebGpuRenderer {
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
         for (let object of scene.getObjects()) {
-            object.draw(passEncoder, device, camera.getViewMatrix(), camera.getProjectionMatrix())
+            object.draw(passEncoder, device, camera)
         }
 
         passEncoder.endPass();
