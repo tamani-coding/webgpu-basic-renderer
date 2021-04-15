@@ -10,17 +10,15 @@ document.body.appendChild(outputCanvas)
 
 let stopRunning = false;
 
-const renderer = new WebGpuRenderer();
 const camera = new Camera(outputCanvas.width / outputCanvas.height);
-const scene = new Scene();
 camera.z = -7
+const scene = new Scene();
 
+const renderer = new WebGpuRenderer();
 renderer.init(outputCanvas).then((success) => {
 
-    let box = RenderObject.cube({ x: -2, y: 1 });
-    scene.add(box);
-    let pyramid = RenderObject.pyramid({ x: 2 });
-    scene.add(pyramid)
+    scene.add(RenderObject.cube({ x: -2, y: 1 }));
+    scene.add(RenderObject.pyramid({ x: 2 }))
 
     const doFrame = () => {
         if (!success || stopRunning) return;
@@ -28,15 +26,13 @@ renderer.init(outputCanvas).then((success) => {
         // ANIMATE
         const now = Date.now() / 1000;
 
-        box.rotX = Math.sin(now)
-        box.rotZ = Math.cos(now)
+        for (let object of scene.getObjects()) {
+            object.rotX = Math.sin(now)
+            object.rotZ = Math.cos(now)
+        }
 
-        pyramid.rotX = Math.cos(now)
-        pyramid.rotZ = Math.sin(now)
-        
-        camera.rotX = Math.cos(now / 5) * Math.PI * 2
-        camera.rotY = Math.sin(now / 5) * Math.PI * 2
-        // camera.rotZ = Math.cos(now)
+        // camera.rotX = Math.cos(now / 5) * Math.PI * 2
+        // camera.rotY = Math.sin(now / 5) * Math.PI * 2
 
         renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
@@ -55,15 +51,12 @@ outputCanvas.onwheel = (event: WheelEvent) => {
     camera.z -= event.deltaY / 100
 }
 
-
 function addCube() {
-    let box = RenderObject.cube({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 10 });
-    scene.add(box);
+    scene.add(RenderObject.cube({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 10 }));
 }
 
 function addPyramid() {
-    let pyramid = RenderObject.pyramid({ x: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 });
-    scene.add(pyramid);
+    scene.add(RenderObject.pyramid({ x: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 }));
 }
 
 const boxB = document.createElement('button')

@@ -143,7 +143,7 @@ export class RenderObject {
         new Float32Array(this.verticesBuffer.getMappedRange()).set(verticesArray);
         this.verticesBuffer.unmap();
 
-        this.setModelMatrix(parameter);
+        this.setTransformation(parameter);
     }
 
     public static cube(parameter?: RenderObjectParameter): RenderObject {
@@ -174,12 +174,9 @@ export class RenderObject {
         // MOVE / TRANSLATE OBJECT
         const modelMatrix = mat4.create();
         mat4.translate(modelMatrix, modelMatrix, vec3.fromValues(this.x, this.y, this.z))
-        mat4.rotate(
-            modelMatrix,
-            modelMatrix,
-            1,
-            vec3.fromValues(this.rotX, this.rotY, this.rotZ)
-        );
+        mat4.rotateX(modelMatrix, modelMatrix, this.rotX);
+        mat4.rotateY(modelMatrix, modelMatrix, this.rotY);
+        mat4.rotateZ(modelMatrix, modelMatrix, this.rotZ);
 
         // PROJECT ON CAMERA
         mat4.multiply(this.modelViewProjectionMatrix, viewMatrix, modelMatrix);
@@ -190,7 +187,7 @@ export class RenderObject {
         );
     }
 
-    private setModelMatrix(parameter?: RenderObjectParameter) {
+    private setTransformation(parameter?: RenderObjectParameter) {
         if (parameter == null) {
             return;
         }

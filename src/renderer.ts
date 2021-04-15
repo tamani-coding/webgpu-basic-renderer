@@ -3,12 +3,19 @@ import { Camera } from './camera';
 
 export var device: GPUDevice;
 
+async function getDevice() {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+        console.log('NO WEBGPU FOUND')
+        return;
+    }
+    return await adapter.requestDevice();
+}
+
 export class WebGpuRenderer {
 
     readonly swapChainFormat = 'bgra8unorm';
-
     private initSuccess: boolean = false;
-
     private swapChain: GPUSwapChain;
     private renderPassDescriptor: GPURenderPassDescriptor;
 
@@ -20,10 +27,14 @@ export class WebGpuRenderer {
             return false;
         }
 
-        device = await this.gpuDevice();
+        device = await getDevice();
 
-        const context = canvas.getContext('gpupresent');
-        this.swapChain = context.configureSwapChain({
+        if (!device) {
+            console.log('found no gpu device!')
+            return false;
+        }
+
+        this.swapChain = canvas.getContext('gpupresent').configureSwapChain({
             device: device,
             format: this.swapChainFormat,
         });
@@ -55,7 +66,7 @@ export class WebGpuRenderer {
             return;
         }
 
-        this.UpdateRenderPassDescriptor(canvas);
+        this.updateRenderPassDescriptor(canvas);
     }
 
     public frame(camera: Camera, scene: Scene) {
@@ -78,15 +89,6 @@ export class WebGpuRenderer {
         device.queue.submit([commandEncoder.finish()]);
     }
 
-    private async gpuDevice() {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) {
-            console.log('NO WEBGPU FOUND')
-            return;
-        }
-        return await adapter.requestDevice();
-    }
-
     private depthTextureView(canvas: HTMLCanvasElement) {
         return device.createTexture({
             size: {
@@ -98,7 +100,7 @@ export class WebGpuRenderer {
         }).createView();
     }
 
-    private UpdateRenderPassDescriptor(canvas: HTMLCanvasElement) {
+    private updateRenderPassDescriptor(canvas: HTMLCanvasElement) {
         this.renderPassDescriptor.depthStencilAttachment.attachment = this.depthTextureView(canvas);
     }
 }
