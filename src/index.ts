@@ -23,15 +23,12 @@ renderer.init(outputCanvas).then((success) => {
     const doFrame = () => {
         // ANIMATE
         const now = Date.now() / 1000;
-
         for (let object of scene.getObjects()) {
             object.rotX = Math.sin(now)
             object.rotZ = Math.cos(now)
         }
 
-        // camera.rotX = Math.cos(now / 5) * Math.PI * 2
-        // camera.rotY = Math.sin(now / 5) * Math.PI * 2
-
+        // RENDER
         renderer.frame(camera, scene);
         requestAnimationFrame(doFrame);
     };
