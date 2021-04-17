@@ -10,10 +10,6 @@ export class Camera {
     public rotY: number = 0;
     public rotZ: number = 0;
 
-    public lookX: number = 0;
-    public lookY: number = 0;
-    public lookZ: number = 0;
-
     public fovy: number = (2 * Math.PI) / 5;
     public aspect: number = 16 / 9;
 
