@@ -14,4 +14,9 @@ and then
 
 `npm run start`
 
-WebGPu is still in development, this example may break.
+WebGPU is still in development, this example may break.
+
+## Learning sources
+
+http://austin-eng.com/webgpu-samples/
+
