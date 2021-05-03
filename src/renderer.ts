@@ -74,7 +74,7 @@ export class WebGpuRenderer {
             return;
         }
 
-        (this.renderPassDescriptor.colorAttachments as [GPURenderPassColorAttachmentDescriptor])[0].attachment = this.swapChain
+        (this.renderPassDescriptor.colorAttachments as [GPURenderPassColorAttachmentNew])[0].view = this.swapChain
             .getCurrentTexture()
             .createView();
 
@@ -101,6 +101,6 @@ export class WebGpuRenderer {
     }
 
     private updateRenderPassDescriptor(canvas: HTMLCanvasElement) {
-        this.renderPassDescriptor.depthStencilAttachment.attachment = this.depthTextureView(canvas);
+        (this.renderPassDescriptor.depthStencilAttachment as GPURenderPassDepthStencilAttachmentNew).view = this.depthTextureView(canvas);
     }
 }
