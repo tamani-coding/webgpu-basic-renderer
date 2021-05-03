@@ -44,18 +44,18 @@ export class WebGpuRenderer {
             colorAttachments: [
                 {
                     // attachment is acquired and set in render loop.
-                    attachment: undefined,
+                    view: undefined,
                     loadValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
-                },
+                } as GPURenderPassColorAttachmentNew,
             ],
             depthStencilAttachment: {
-                attachment: depthTextureView,
+                view: depthTextureView,
 
                 depthLoadValue: 1.0,
                 depthStoreOp: 'store',
                 stencilLoadValue: 0,
                 stencilStoreOp: 'store',
-            },
+            } as GPURenderPassDepthStencilAttachmentNew,
         };
 
         return this.initSuccess = true;
