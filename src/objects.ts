@@ -1,4 +1,3 @@
-import { Camera } from './camera';
 import { device } from './renderer';
 import { mat4, vec3 } from 'gl-matrix';
 import { triangleVertexArray, triangleVertexCount, cubeVertexArray, cubeVertexCount } from './vertices'
@@ -114,7 +113,7 @@ const wgslShaders = {
       
         shadowFactor = ambientFactor + shadowFactor / 9.0;
       
-        let lambertFactor : f32 = abs(dot(normalize(scene.lightPos - input.fragPos), input.fragNorm));
+        let lambertFactor : f32 = dot(normalize(scene.lightPos - input.fragPos), input.fragNorm);
       
         let lightingFactor : f32 = min(shadowFactor * lambertFactor, 1.0);
         return vec4<f32>(lightingFactor * albedo, 1.0);
@@ -125,6 +124,7 @@ const wgslShaders = {
 const positionOffset = 0;
 const vertexSize = 4 * 6; // Byte size of one object.
 const swapChainFormat = 'bgra8unorm';
+const shadowDepthTextureSize = 1024;
 
 export interface RenderObjectParameter {
 
@@ -155,13 +155,19 @@ export class RenderObject {
 
     private renderPipeline: GPURenderPipeline;
     private shadowPipeline: GPURenderPipeline;
-    private uniformBuffer: GPUBuffer;
-    private uniformBindGroup: GPUBindGroup;
+    private modelUniformBuffer: GPUBuffer;
+    private modelUniformBindGroup: GPUBindGroup;
     private sceneBindGroupForShadow: GPUBindGroup;
     private verticesBuffer: GPUBuffer;
     // private indexBuffer: GPUBuffer;
     private vertexCount: number;
     // private indexCount: number;
+
+    private sceneUniformBuffer: GPUBuffer;
+    private sceneBindGroupForRender: GPUBindGroup;
+    private bglForRender: GPUBindGroupLayout;
+    private shadowPassDescriptor: GPURenderPassDescriptor;
+
 
     // Create some common descriptors used for both the shadow pipeline
     // and the color rendering pipeline.
@@ -193,6 +199,26 @@ export class RenderObject {
     constructor(device: GPUDevice, verticesArray: Float32Array, vertexCount: number, parameter?: RenderObjectParameter) {
         this.vertexCount = vertexCount;
 
+        this.modelUniformBuffer = device.createBuffer({
+            size: this.uniformBufferSize,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this.verticesBuffer = device.createBuffer({
+            size: verticesArray.byteLength,
+            usage: GPUBufferUsage.VERTEX,
+            mappedAtCreation: true,
+        });
+        new Float32Array(this.verticesBuffer.getMappedRange()).set(verticesArray);
+        this.verticesBuffer.unmap();
+
+        this.sceneUniformBuffer = device.createBuffer({
+            // Two 4x4 viewProj matrices,
+            // one for the camera and one for the light.
+            // Then a vec3 for the light position.
+            size: 2 * 4 * 16 + 3 * 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
         this.shadowPipeline = device.createRenderPipeline({
             vertex: {
                 module: device.createShaderModule({
@@ -218,18 +244,13 @@ export class RenderObject {
             primitive: this.primitive,
         });
 
-        this.uniformBuffer = device.createBuffer({
-            size: this.uniformBufferSize,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
-        this.uniformBindGroup = device.createBindGroup({
+        this.modelUniformBindGroup = device.createBindGroup({
             layout: this.shadowPipeline.getBindGroupLayout(1),
             entries: [
                 {
                     binding: 0,
                     resource: {
-                        buffer: this.uniformBuffer,
+                        buffer: this.modelUniformBuffer,
                         offset: 0,
                         size: this.matrixSize,
                     },
@@ -237,32 +258,10 @@ export class RenderObject {
             ],
         });
 
-        this.verticesBuffer = device.createBuffer({
-            size: verticesArray.byteLength,
-            usage: GPUBufferUsage.VERTEX,
-            mappedAtCreation: true,
-        });
-        new Float32Array(this.verticesBuffer.getMappedRange()).set(verticesArray);
-        this.verticesBuffer.unmap();
-
-        // SHADOW
-        // Create the model index buffer.
-        // this.indexCount = verticesArray.byteLength / 10;
-        // this.indexBuffer = device.createBuffer({
-        //     size: this.indexCount * Uint16Array.BYTES_PER_ELEMENT,
-        //     usage: GPUBufferUsage.INDEX,
-        //     mappedAtCreation: true,
-        // });
-        // const mapping = new Uint16Array(this.indexBuffer.getMappedRange());
-        // for (let i = 0; i < this.indexCount; i++) {
-        //     mapping.set([this.indexCount], i);
-        // }
-        // this.indexBuffer.unmap();
-
         // Create a bind group layout which holds the scene uniforms and
         // the texture+sampler for depth. We create it manually because the WebPU
         // implementation doesn't infer this from the shader (yet).
-        const bglForRender = device.createBindGroupLayout({
+        this.bglForRender = device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
@@ -288,22 +287,13 @@ export class RenderObject {
             ],
         });
 
-
-        const sceneUniformBuffer = device.createBuffer({
-            // Two 4x4 viewProj matrices,
-            // one for the camera and one for the light.
-            // Then a vec3 for the light position.
-            size: 2 * 4 * 16 + 3 * 4,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
         this.sceneBindGroupForShadow = device.createBindGroup({
             layout: this.shadowPipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
                     resource: {
-                        buffer: sceneUniformBuffer,
+                        buffer: this.sceneUniformBuffer,
                     },
                 },
             ],
@@ -313,7 +303,7 @@ export class RenderObject {
             // Specify the pipeline layout. The layout for the model is the same, so
             // reuse it from the shadow pipeline.
             layout: device.createPipelineLayout({
-              bindGroupLayouts: [bglForRender, this.shadowPipeline.getBindGroupLayout(1)],
+              bindGroupLayouts: [this.bglForRender, this.shadowPipeline.getBindGroupLayout(1)],
             }),
             vertex: {
               module: device.createShaderModule({
@@ -341,6 +331,48 @@ export class RenderObject {
             primitive: this.primitive,
           });
 
+          /////////////////////
+
+        // Create the depth texture for rendering/sampling the shadow map.
+        const shadowDepthTexture = device.createTexture({
+            size: [shadowDepthTextureSize, shadowDepthTextureSize, 1],
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.SAMPLED,
+            format: 'depth32float',
+        });
+        const shadowDepthTextureView = shadowDepthTexture.createView();
+        this.shadowPassDescriptor = {
+            colorAttachments: [],
+            depthStencilAttachment: {
+                view: shadowDepthTextureView,
+                depthLoadValue: 1.0,
+                depthStoreOp: 'store',
+                stencilLoadValue: 0,
+                stencilStoreOp: 'store',
+            } as GPURenderPassDepthStencilAttachmentNew,
+        };
+
+        this.sceneBindGroupForRender = device.createBindGroup({
+            layout: this.bglForRender,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.sceneUniformBuffer,
+                    },
+                },
+                {
+                    binding: 1,
+                    resource: shadowDepthTextureView,
+                },
+                {
+                    binding: 2,
+                    resource: device.createSampler({
+                        compare: 'less',
+                    }),
+                },
+            ],
+        });
+
         this.setTransformation(parameter);
     }
 
@@ -352,39 +384,47 @@ export class RenderObject {
         return new RenderObject(device, triangleVertexArray, triangleVertexCount, parameter)
     }
 
-    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, sceneBindGroupForRender: GPUBindGroup) {
-        this.updateTransformationMatrix();
-
-        passEncoder.setPipeline(this.renderPipeline);
-        device.queue.writeBuffer(
-            this.uniformBuffer,
-            0,
-            this.modelViewProjectionMatrix.buffer,
-            this.modelViewProjectionMatrix.byteOffset,
-            this.modelViewProjectionMatrix.byteLength
-        );
-
-        passEncoder.setBindGroup(0, sceneBindGroupForRender);
-        passEncoder.setBindGroup(1, this.uniformBindGroup);
-        passEncoder.setVertexBuffer(0, this.verticesBuffer);
-        passEncoder.draw(this.vertexCount, 1, 0, 0);
-    }
-
     public shadow(shadowPass: GPURenderPassEncoder) {
         this.updateTransformationMatrix();
 
         shadowPass.setPipeline(this.shadowPipeline);
         device.queue.writeBuffer(
-            this.uniformBuffer,
+            this.modelUniformBuffer,
             0,
             this.modelViewProjectionMatrix.buffer,
             this.modelViewProjectionMatrix.byteOffset,
             this.modelViewProjectionMatrix.byteLength
         );
         shadowPass.setBindGroup(0, this.sceneBindGroupForShadow);
-        shadowPass.setBindGroup(1, this.uniformBindGroup);
+        shadowPass.setBindGroup(1, this.modelUniformBindGroup);
         shadowPass.setVertexBuffer(0, this.verticesBuffer);
         shadowPass.draw(this.vertexCount, 1, 0, 0);
+    }
+
+    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice) {
+        this.updateTransformationMatrix();
+
+        passEncoder.setPipeline(this.renderPipeline);
+        device.queue.writeBuffer(
+            this.modelUniformBuffer,
+            0,
+            this.modelViewProjectionMatrix.buffer,
+            this.modelViewProjectionMatrix.byteOffset,
+            this.modelViewProjectionMatrix.byteLength
+        );
+
+        passEncoder.setBindGroup(0, this.sceneBindGroupForRender);
+        passEncoder.setBindGroup(1, this.modelUniformBindGroup);
+        passEncoder.setVertexBuffer(0, this.verticesBuffer);
+        passEncoder.draw(this.vertexCount, 1, 0, 0);
+    }
+
+    public getSceneUniformBuffer(): GPUBuffer {
+        return this.sceneUniformBuffer;
+    }
+
+    public getShadowPassDescriptor(): GPURenderPassDescriptor {
+        return this.shadowPassDescriptor;
     }
 
     private updateTransformationMatrix() {

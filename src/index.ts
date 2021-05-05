@@ -15,6 +15,7 @@ init().then( () => {
     const scene = new Scene();
     const camera = new Camera(outputCanvas.width / outputCanvas.height);
     camera.z = 10
+    camera.y = 10
 
     renderer.init(outputCanvas).then((success) => {
         if (!success) return;
@@ -25,9 +26,9 @@ init().then( () => {
         const doFrame = () => {
             // ANIMATE
             const now = Date.now() / 1000;
-            // scene.lightPosition[0] = Math.sin(now) * 50;
-            // scene.lightPosition[1] = 50;
-            // scene.lightPosition[2] = Math.cos(now) * 50;
+            scene.lightPosition[0] = Math.sin(now) * 100;
+            scene.lightPosition[1] = 50;
+            scene.lightPosition[2] = Math.cos(now) * 100;
             // for (let object of scene.getObjects()) {
             //     object.rotX = Math.sin(now)
             //     object.rotZ = Math.cos(now)

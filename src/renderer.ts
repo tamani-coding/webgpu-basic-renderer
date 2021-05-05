@@ -44,6 +44,7 @@ export class WebGpuRenderer {
                     // attachment is acquired and set in render loop.
                     view: undefined,
                     loadValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+                    storeOp: 'store',
                 } as GPURenderPassColorAttachmentNew,
             ],
             depthStencilAttachment: {
@@ -72,10 +73,12 @@ export class WebGpuRenderer {
             return;
         }
 
-        const sceneUniformBuffer = scene.getSceneUniformBuffer();
+        const object = scene.getObjects()[0];
+
+        const sceneUniformBuffer = object.getSceneUniformBuffer();
         const cameraViewProj = camera.getCameraViewProjMatrix() as Float32Array;
         const lightMatrixData = scene.getLightMatrixData();
-        const lightData = scene.getLightPosition();
+        const lightPosition = scene.getLightPosition();
 
         device.queue.writeBuffer(
             sceneUniformBuffer,
@@ -94,9 +97,9 @@ export class WebGpuRenderer {
         device.queue.writeBuffer(
             sceneUniformBuffer,
             128,
-            lightData.buffer,
-            lightData.byteOffset,
-            lightData.byteLength
+            lightPosition.buffer,
+            lightPosition.byteOffset,
+            lightPosition.byteLength
         );
 
         (this.renderPassDescriptor.colorAttachments as [GPURenderPassColorAttachmentNew])[0].view = this.swapChain
@@ -106,19 +109,19 @@ export class WebGpuRenderer {
         const commandEncoder = device.createCommandEncoder();
 
         // shadow pass
-        const shadowPass = commandEncoder.beginRenderPass(scene.getShadowPassDescriptor());
-        for (let object of scene.getObjects()) {
-            object.shadow(shadowPass)
-        }
-        // scene.getObjects()[0].shadow(shadowPass)
+        const shadowPass = commandEncoder.beginRenderPass(object.getShadowPassDescriptor());
+        // for (let object of scene.getObjects()) {
+        //     object.shadow(shadowPass)
+        // }
+        object.shadow(shadowPass)
         shadowPass.endPass();
 
         // render pass
         const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
-        for (let object of scene.getObjects()) {
-            object.draw(passEncoder, device, scene.getSceneBindGroupForRender())
-        }
-        // scene.getObjects()[0].draw(passEncoder, device, scene.getSceneBindGroupForRender(), camera)
+        // for (let object of scene.getObjects()) {
+        //     object.draw(passEncoder, device, scene.getSceneBindGroupForRender())
+        // }
+        object.draw(passEncoder, device)
         passEncoder.endPass();
         device.queue.submit([commandEncoder.finish()]);
     }
