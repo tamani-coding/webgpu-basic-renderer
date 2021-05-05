@@ -3,36 +3,128 @@ import { device } from './renderer';
 import { mat4, vec3 } from 'gl-matrix';
 import { triangleVertexArray, triangleVertexCount, cubeVertexArray, cubeVertexCount } from './vertices'
 
+const shadowShaders = {
+    vertex: `
+    [[block]] struct Scene {
+        lightViewProjMatrix : mat4x4<f32>;
+        cameraViewProjMatrix : mat4x4<f32>;
+        lightPos : vec3<f32>;
+      };
+      
+      [[block]] struct Model {
+        modelMatrix : mat4x4<f32>;
+      };
+      
+      [[group(0), binding(0)]] var<uniform> scene : Scene;
+      [[group(1), binding(0)]] var<uniform> model : Model;
+      
+      [[stage(vertex)]]
+      fn main([[location(0)]] position : vec3<f32>)
+           -> [[builtin(position)]] vec4<f32> {
+        return scene.lightViewProjMatrix * model.modelMatrix * vec4<f32>(position, 1.0);
+      }
+      `,
+    fragment: `
+        [[stage(fragment)]]
+        fn main() {
+        }
+      `
+}
+
 const wgslShaders = {
     vertex: `
-  [[block]] struct Uniforms {
-    modelViewProjectionMatrix : mat4x4<f32>;
-  };
-  
-  [[binding(0), group(0)]] var<uniform> uniforms : Uniforms;
-  
-  struct VertexOutput {
-    [[builtin(position)]] Position : vec4<f32>;
-    [[location(0)]] fragColor : vec4<f32>;
-  };
-  
-  [[stage(vertex)]]
-  fn main([[location(0)]] position : vec4<f32>,
-          [[location(1)]] color : vec4<f32>) -> VertexOutput {
-    return VertexOutput(uniforms.modelViewProjectionMatrix * position, color);
-  }
+    [[block]] struct Scene {
+        lightViewProjMatrix : mat4x4<f32>;
+        cameraViewProjMatrix : mat4x4<f32>;
+        lightPos : vec3<f32>;
+      };
+      
+      [[block]] struct Model {
+        modelMatrix : mat4x4<f32>;
+      };
+      
+      [[group(0), binding(0)]] var<uniform> scene : Scene;
+      [[group(1), binding(0)]] var<uniform> model : Model;
+      
+      struct VertexOutput {
+        [[location(0)]] shadowPos : vec3<f32>;
+        [[location(1)]] fragPos : vec3<f32>;
+        [[location(2)]] fragNorm : vec3<f32>;
+      
+        [[builtin(position)]] Position : vec4<f32>;
+      };
+      
+      [[stage(vertex)]]
+      fn main([[location(0)]] position : vec3<f32>,
+              [[location(1)]] normal : vec3<f32>) -> VertexOutput {
+        var output : VertexOutput;
+      
+        // XY is in (-1, 1) space, Z is in (0, 1) space
+        let posFromLight : vec4<f32> = scene.lightViewProjMatrix * model.modelMatrix * vec4<f32>(position, 1.0);
+      
+        // Convert XY to (0, 1)
+        // Y is flipped because texture coords are Y-down.
+        output.shadowPos = vec3<f32>(
+          posFromLight.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5),
+          posFromLight.z
+        );
+      
+        output.Position = scene.cameraViewProjMatrix * model.modelMatrix * vec4<f32>(position, 1.0);
+        output.fragPos = output.Position.xyz;
+        output.fragNorm = normal;
+        return output;
+      }
   `,
     fragment: `
-  [[stage(fragment)]]
-  fn main([[location(0)]] fragColor : vec4<f32>) -> [[location(0)]] vec4<f32> {
-    return fragColor;
-  }
+    [[block]] struct Scene {
+        lightViewProjMatrix : mat4x4<f32>;
+        cameraViewProjMatrix : mat4x4<f32>;
+        lightPos : vec3<f32>;
+      };
+      
+      [[group(0), binding(0)]] var<uniform> scene : Scene;
+      [[group(0), binding(1)]] var shadowMap: texture_depth_2d;
+      [[group(0), binding(2)]] var shadowSampler: sampler_comparison;
+      
+      struct FragmentInput {
+        [[location(0)]] shadowPos : vec3<f32>;
+        [[location(1)]] fragPos : vec3<f32>;
+        [[location(2)]] fragNorm : vec3<f32>;
+      };
+      
+      let albedo : vec3<f32> = vec3<f32>(0.9, 0.9, 0.9);
+      let ambientFactor : f32 = 0.2;
+      
+      [[stage(fragment)]]
+      fn main(input : FragmentInput) -> [[location(0)]] vec4<f32> {
+        // Percentage-closer filtering. Sample texels in the region
+        // to smooth the result.
+        var shadowFactor : f32 = 0.0;
+        for (var y : i32 = -1 ; y <= 1 ; y = y + 1) {
+            for (var x : i32 = -1 ; x <= 1 ; x = x + 1) {
+              let offset : vec2<f32> = vec2<f32>(
+                f32(x) * 0.0009765625,
+                f32(y) * 0.0009765625);
+      
+              shadowFactor = shadowFactor + textureSampleCompare(
+                shadowMap, shadowSampler,
+                input.shadowPos.xy + offset, input.shadowPos.z - 0.007);
+            }
+        }
+      
+        shadowFactor = ambientFactor + shadowFactor / 9.0;
+      
+        let lambertFactor : f32 = abs(dot(normalize(scene.lightPos - input.fragPos), input.fragNorm));
+      
+        let lightingFactor : f32 = min(shadowFactor * lambertFactor, 1.0);
+        return vec4<f32>(lightingFactor * albedo, 1.0);
+      }
   `,
 };
 
 const positionOffset = 0;
-const colorOffset = 4 * 4; // Byte offset of object color attribute.
-const vertexSize = 4 * 10; // Byte size of one object.
+const vertexSize = 4 * 6; // Byte size of one object.
+const swapChainFormat = 'bgra8unorm';
 
 export interface RenderObjectParameter {
 
@@ -62,59 +154,68 @@ export class RenderObject {
     private modelViewProjectionMatrix = mat4.create() as Float32Array;
 
     private renderPipeline: GPURenderPipeline;
+    private shadowPipeline: GPURenderPipeline;
     private uniformBuffer: GPUBuffer;
     private uniformBindGroup: GPUBindGroup;
+    private sceneBindGroupForShadow: GPUBindGroup;
     private verticesBuffer: GPUBuffer;
+    // private indexBuffer: GPUBuffer;
     private vertexCount: number;
+    // private indexCount: number;
+
+    // Create some common descriptors used for both the shadow pipeline
+    // and the color rendering pipeline.
+    private vertexBuffers: Iterable<GPUVertexBufferLayout> = [
+        {
+            arrayStride: vertexSize,
+            attributes: [
+                {
+                    // position
+                    shaderLocation: 0,
+                    offset: positionOffset,
+                    format: 'float32x3',
+                },
+                {
+                    // normal
+                    shaderLocation: 1,
+                    offset: Float32Array.BYTES_PER_ELEMENT * 3,
+                    format: 'float32x3',
+                },
+            ],
+        } as GPUVertexBufferLayout,
+    ];
+
+    private primitive: GPUPrimitiveState = {
+        topology: 'triangle-list',
+        cullMode: 'back',
+    };
 
     constructor(device: GPUDevice, verticesArray: Float32Array, vertexCount: number, parameter?: RenderObjectParameter) {
         this.vertexCount = vertexCount;
-        this.renderPipeline = device.createRenderPipeline({
+
+        this.shadowPipeline = device.createRenderPipeline({
             vertex: {
                 module: device.createShaderModule({
-                    code: wgslShaders.vertex,
+                    code: shadowShaders.vertex,
                 }),
                 entryPoint: 'main',
-                buffers: [
-                    {
-                        arrayStride: vertexSize,
-                        attributes: [
-                            {
-                                // position
-                                shaderLocation: 0,
-                                offset: positionOffset,
-                                format: 'float32x4',
-                            },
-                            {
-                                // color
-                                shaderLocation: 1,
-                                offset: colorOffset,
-                                format: 'float32x4',
-                            },
-                        ],
-                    } as GPUVertexBufferLayout,
-                ],
+                buffers: this.vertexBuffers,
             },
             fragment: {
+                // This should be omitted and we can use a vertex-only pipeline, but it's
+                // not yet implemented.
                 module: device.createShaderModule({
-                    code: wgslShaders.fragment,
+                    code: shadowShaders.fragment,
                 }),
                 entryPoint: 'main',
-                targets: [
-                    {
-                        format: 'bgra8unorm' as GPUTextureFormat,
-                    },
-                ],
-            },
-            primitive: {
-                topology: 'triangle-list',
-                cullMode: 'back',
+                targets: [],
             },
             depthStencil: {
                 depthWriteEnabled: true,
                 depthCompare: 'less',
-                format: 'depth24plus-stencil8',
+                format: 'depth32float',
             },
+            primitive: this.primitive,
         });
 
         this.uniformBuffer = device.createBuffer({
@@ -123,7 +224,7 @@ export class RenderObject {
         });
 
         this.uniformBindGroup = device.createBindGroup({
-            layout: this.renderPipeline.getBindGroupLayout(0),
+            layout: this.shadowPipeline.getBindGroupLayout(1),
             entries: [
                 {
                     binding: 0,
@@ -144,6 +245,102 @@ export class RenderObject {
         new Float32Array(this.verticesBuffer.getMappedRange()).set(verticesArray);
         this.verticesBuffer.unmap();
 
+        // SHADOW
+        // Create the model index buffer.
+        // this.indexCount = verticesArray.byteLength / 10;
+        // this.indexBuffer = device.createBuffer({
+        //     size: this.indexCount * Uint16Array.BYTES_PER_ELEMENT,
+        //     usage: GPUBufferUsage.INDEX,
+        //     mappedAtCreation: true,
+        // });
+        // const mapping = new Uint16Array(this.indexBuffer.getMappedRange());
+        // for (let i = 0; i < this.indexCount; i++) {
+        //     mapping.set([this.indexCount], i);
+        // }
+        // this.indexBuffer.unmap();
+
+        // Create a bind group layout which holds the scene uniforms and
+        // the texture+sampler for depth. We create it manually because the WebPU
+        // implementation doesn't infer this from the shader (yet).
+        const bglForRender = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: 'uniform',
+                    },
+                } as GPUBindGroupLayoutEntry,
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    texture: {
+                        sampleType: 'depth',
+                    },
+                } as GPUBindGroupLayoutEntry,
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    sampler: {
+                        type: 'comparison',
+                    },
+                } as GPUBindGroupLayoutEntry,
+            ],
+        });
+
+
+        const sceneUniformBuffer = device.createBuffer({
+            // Two 4x4 viewProj matrices,
+            // one for the camera and one for the light.
+            // Then a vec3 for the light position.
+            size: 2 * 4 * 16 + 3 * 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        this.sceneBindGroupForShadow = device.createBindGroup({
+            layout: this.shadowPipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: sceneUniformBuffer,
+                    },
+                },
+            ],
+        });
+
+        this.renderPipeline = device.createRenderPipeline({
+            // Specify the pipeline layout. The layout for the model is the same, so
+            // reuse it from the shadow pipeline.
+            layout: device.createPipelineLayout({
+              bindGroupLayouts: [bglForRender, this.shadowPipeline.getBindGroupLayout(1)],
+            }),
+            vertex: {
+              module: device.createShaderModule({
+                code: wgslShaders.vertex,
+              }),
+              entryPoint: 'main',
+              buffers: this.vertexBuffers,
+            },
+            fragment: {
+              module: device.createShaderModule({
+                code: wgslShaders.fragment,
+              }),
+              entryPoint: 'main',
+              targets: [
+                {
+                  format: swapChainFormat as GPUTextureFormat,
+                },
+              ],
+            },
+            depthStencil: {
+              depthWriteEnabled: true,
+              depthCompare: 'less',
+              format: 'depth24plus-stencil8',
+            },
+            primitive: this.primitive,
+          });
+
         this.setTransformation(parameter);
     }
 
@@ -155,8 +352,8 @@ export class RenderObject {
         return new RenderObject(device, triangleVertexArray, triangleVertexCount, parameter)
     }
 
-    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, camera: Camera) {
-        this.updateTransformationMatrix(camera.getViewMatrix(), camera.getProjectionMatrix())
+    public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, sceneBindGroupForRender: GPUBindGroup) {
+        this.updateTransformationMatrix();
 
         passEncoder.setPipeline(this.renderPipeline);
         device.queue.writeBuffer(
@@ -166,12 +363,31 @@ export class RenderObject {
             this.modelViewProjectionMatrix.byteOffset,
             this.modelViewProjectionMatrix.byteLength
         );
+
+        passEncoder.setBindGroup(0, sceneBindGroupForRender);
+        passEncoder.setBindGroup(1, this.uniformBindGroup);
         passEncoder.setVertexBuffer(0, this.verticesBuffer);
-        passEncoder.setBindGroup(0, this.uniformBindGroup);
         passEncoder.draw(this.vertexCount, 1, 0, 0);
     }
 
-    private updateTransformationMatrix(viewMatrix: mat4, projectionMatrix: mat4) {
+    public shadow(shadowPass: GPURenderPassEncoder) {
+        this.updateTransformationMatrix();
+
+        shadowPass.setPipeline(this.shadowPipeline);
+        device.queue.writeBuffer(
+            this.uniformBuffer,
+            0,
+            this.modelViewProjectionMatrix.buffer,
+            this.modelViewProjectionMatrix.byteOffset,
+            this.modelViewProjectionMatrix.byteLength
+        );
+        shadowPass.setBindGroup(0, this.sceneBindGroupForShadow);
+        shadowPass.setBindGroup(1, this.uniformBindGroup);
+        shadowPass.setVertexBuffer(0, this.verticesBuffer);
+        shadowPass.draw(this.vertexCount, 1, 0, 0);
+    }
+
+    private updateTransformationMatrix() {
         // MOVE / TRANSLATE OBJECT
         const modelMatrix = mat4.create();
         mat4.translate(modelMatrix, modelMatrix, vec3.fromValues(this.x, this.y, this.z))
@@ -179,13 +395,7 @@ export class RenderObject {
         mat4.rotateY(modelMatrix, modelMatrix, this.rotY);
         mat4.rotateZ(modelMatrix, modelMatrix, this.rotZ);
 
-        // PROJECT ON CAMERA
-        mat4.multiply(this.modelViewProjectionMatrix, viewMatrix, modelMatrix);
-        mat4.multiply(
-            this.modelViewProjectionMatrix,
-            projectionMatrix,
-            this.modelViewProjectionMatrix
-        );
+        mat4.copy(this.modelViewProjectionMatrix, modelMatrix)
     }
 
     private setTransformation(parameter?: RenderObjectParameter) {

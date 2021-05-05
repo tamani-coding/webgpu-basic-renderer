@@ -22,7 +22,9 @@ export class Camera {
 
     public getViewMatrix () : mat4 {
         let viewMatrix = mat4.create();
-        mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(this.x, this.y, this.z));
+
+        mat4.lookAt(viewMatrix, vec3.fromValues(this.x, this.y, this.z), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0));
+
         mat4.rotateX(viewMatrix, viewMatrix, this.rotX);
         mat4.rotateY(viewMatrix, viewMatrix, this.rotY);
         mat4.rotateZ(viewMatrix, viewMatrix, this.rotZ);
@@ -35,4 +37,11 @@ export class Camera {
         return projectionMatrix;
     }
 
+    public getCameraViewProjMatrix () : mat4 {
+        const viewProjMatrix = mat4.create();
+        const view = this.getViewMatrix();
+        const proj = this.getProjectionMatrix();
+        mat4.multiply(viewProjMatrix, proj, view);
+        return viewProjMatrix;
+    }
 }
