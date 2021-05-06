@@ -8,7 +8,7 @@ export class Scene {
 
     private lightProjectionMatrix = mat4.create();
 
-    public lightPosition = vec3.fromValues(0, -50, 50);
+    public lightPosition = vec3.fromValues(50, 0, 0);
     private origin = vec3.fromValues(0, 0, 0);
     private upVector = vec3.fromValues(0, 1, 0);
     private lightViewMatrix = mat4.create();

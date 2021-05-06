@@ -26,13 +26,13 @@ init().then( () => {
         const doFrame = () => {
             // ANIMATE
             const now = Date.now() / 1000;
-            scene.lightPosition[0] = Math.sin(now) * 100;
-            scene.lightPosition[1] = 50;
-            scene.lightPosition[2] = Math.cos(now) * 100;
-            // for (let object of scene.getObjects()) {
-            //     object.rotX = Math.sin(now)
-            //     object.rotZ = Math.cos(now)
-            // }
+            // scene.lightPosition[0] = Math.sin(now) * 100;
+            // scene.lightPosition[1] = 50;
+            // scene.lightPosition[2] = Math.cos(now) * 100;
+            for (let object of scene.getObjects()) {
+                object.rotX = Math.sin(now) * Math.PI
+                object.rotZ = Math.cos(now)
+            }
     
             // RENDER
             renderer.frame(camera, scene);

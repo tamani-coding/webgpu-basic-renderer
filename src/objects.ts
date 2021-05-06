@@ -70,7 +70,7 @@ const wgslShaders = {
       
         output.Position = scene.cameraViewProjMatrix * model.modelMatrix * vec4<f32>(position, 1.0);
         output.fragPos = output.Position.xyz;
-        output.fragNorm = normal;
+        output.fragNorm = (model.modelMatrix * vec4<f32>(normal, 1.0)).xyz;
         return output;
       }
   `,
