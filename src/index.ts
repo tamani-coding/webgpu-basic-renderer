@@ -10,7 +10,7 @@ document.body.appendChild(outputCanvas)
 
 
 const camera = new Camera(outputCanvas.width / outputCanvas.height);
-camera.z = -7
+camera.z = 7
 const scene = new Scene();
 
 const renderer = new WebGpuRenderer();
@@ -70,7 +70,7 @@ document.body.appendChild(pyramidB)
 
 // ZOOM
 outputCanvas.onwheel = (event: WheelEvent) => {
-    camera.z -= event.deltaY / 100
+    camera.z += event.deltaY / 100
 }
 
 // MOUSE DRAG

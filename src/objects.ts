@@ -156,7 +156,7 @@ export class RenderObject {
     }
 
     public draw(passEncoder: GPURenderPassEncoder, device: GPUDevice, camera: Camera) {
-        this.updateTransformationMatrix(camera.getViewMatrix(), camera.getProjectionMatrix())
+        this.updateTransformationMatrix(camera.getCameraViewProjMatrix())
 
         passEncoder.setPipeline(this.renderPipeline);
         device.queue.writeBuffer(
@@ -171,7 +171,7 @@ export class RenderObject {
         passEncoder.draw(this.vertexCount, 1, 0, 0);
     }
 
-    private updateTransformationMatrix(viewMatrix: mat4, projectionMatrix: mat4) {
+    private updateTransformationMatrix(cameraProjectionMatrix: mat4) {
         // MOVE / TRANSLATE OBJECT
         const modelMatrix = mat4.create();
         mat4.translate(modelMatrix, modelMatrix, vec3.fromValues(this.x, this.y, this.z))
@@ -180,12 +180,7 @@ export class RenderObject {
         mat4.rotateZ(modelMatrix, modelMatrix, this.rotZ);
 
         // PROJECT ON CAMERA
-        mat4.multiply(this.modelViewProjectionMatrix, viewMatrix, modelMatrix);
-        mat4.multiply(
-            this.modelViewProjectionMatrix,
-            projectionMatrix,
-            this.modelViewProjectionMatrix
-        );
+        mat4.multiply(this.modelViewProjectionMatrix, cameraProjectionMatrix, modelMatrix);
     }
 
     private setTransformation(parameter?: RenderObjectParameter) {
