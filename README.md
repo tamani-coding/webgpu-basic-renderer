@@ -1,5 +1,7 @@
 # webgpu-basic-renderer
 
+![Screenshot](https://github.com/tamani-coding/webgpu-basic-renderer/blob/main/screenshot.png?raw=true)
+
 Make sure your browser supports webGPU.
 
 For example download chrome canary and call:
