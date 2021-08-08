@@ -23,7 +23,7 @@
     "webpack-cli": "^4.6.0"
   },
   "dependencies": {
-    "@webgpu/types": "0.1.2",
+    "@webgpu/types": "0.1.6",
     "gl-matrix": "^3.3.0"
   }
 }
