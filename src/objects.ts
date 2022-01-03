@@ -5,7 +5,7 @@ import { triangleVertexArray, triangleVertexCount, cubeVertexArray, cubeVertexCo
 
 const wgslShaders = {
     vertex: `
-  [[block]] struct Uniforms {
+  struct Uniforms {
     modelViewProjectionMatrix : mat4x4<f32>;
   };
   
